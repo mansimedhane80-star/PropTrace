@@ -14,7 +14,8 @@ const inspectionRoutes = require("./routes/inspectionRoutes");
 const app = express();
 
 // Middleware
-app.use(cors());
+const clientOrigin = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+app.use(cors({ origin: clientOrigin }));
 // Inspection evidence is stored as data URLs; allow several compressed photos per save.
 app.use(express.json({ limit: "18mb" }));
 
@@ -55,7 +56,7 @@ const startServer = async () => {
     });
 };
 
-startServer().catch((error) => {
+startServer().catch(() => {
     console.error("Backend startup aborted because MongoDB is unavailable.");
     process.exitCode = 1;
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import API_URL from "../../services/api";
+import { canSubmitInspectionChangeRequest } from "../../utils/inspectionReview";
 import Logo from "../../Logo";
 import HandoverReports from "../shared/HandoverReports";
 
@@ -347,6 +348,11 @@ function TenantDashboard({ user, onLogout }) {
       return;
     }
 
+    if (status === "Changes Requested" && !canSubmitInspectionChangeRequest(note)) {
+      setInspectionError("Add a note describing the change you are requesting.");
+      return;
+    }
+
     try {
       setReviewingInspectionId(inspectionId);
 
@@ -373,7 +379,7 @@ function TenantDashboard({ user, onLogout }) {
       setInspections((previous) =>
         previous.map((inspection) =>
           inspection._id === inspectionId
-            ? { ...inspection, status, revision: inspection.revision + 1, responsibleRole: "landlord" }
+            ? { ...inspection, ...(data.inspection || {}), property: inspection.property, tenant: inspection.tenant, landlord: inspection.landlord, status, revision: data.inspection?.revision ?? inspection.revision + 1, responsibleRole: "landlord" }
             : inspection
         )
       );
@@ -381,6 +387,7 @@ function TenantDashboard({ user, onLogout }) {
       setInspectionMessage(
         status === "Changes Requested" ? "Changes requested. The landlord can now update this inspection." : "Review recorded. The landlord has been asked to confirm the inspection."
       );
+      setInspectionReviewNote("");
     } catch (err) {
       setInspectionError(
         err.message || "Inspection review failed."
@@ -474,7 +481,7 @@ function TenantDashboard({ user, onLogout }) {
               {isReviewing ? "Updating..." : "Confirm Review"}
             </button>
             <textarea value={inspectionReviewNote} onChange={(event) => setInspectionReviewNote(event.target.value)} aria-label="Review note" placeholder="Describe the change needed" rows={3} />
-            <button type="button" className="tenant-button tenant-button-primary" disabled={Boolean(reviewingInspectionId)} onClick={() => handleReviewInspection(inspection._id, "Changes Requested", inspectionReviewNote)}>Request Changes</button>
+            <button type="button" className="tenant-button tenant-button-primary" disabled={Boolean(reviewingInspectionId) || !canSubmitInspectionChangeRequest(inspectionReviewNote)} onClick={() => handleReviewInspection(inspection._id, "Changes Requested", inspectionReviewNote)}>Request Changes</button>
           </div>
         )}
 
@@ -482,6 +489,10 @@ function TenantDashboard({ user, onLogout }) {
           <p className="tenant-success-text">
             Your review is recorded. Waiting for the landlord to approve and finalize.
           </p>
+        )}
+
+        {inspection.status === "Awaiting Landlord Review" && (
+          <p className="tenant-success-text">Your review is recorded. Waiting for the landlord to confirm.</p>
         )}
 
         {(inspection.items || []).length > 0 ? (

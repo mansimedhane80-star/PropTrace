@@ -10,6 +10,21 @@ const transitions = {
   Reviewed: { "Awaiting Landlord Review": "landlord", Completed: "landlord" },
 };
 
+const reviewStatuses = new Set([
+  "Submitted for Review",
+  "Awaiting Tenant Review",
+  "Awaiting Landlord Review",
+  "Awaiting Other Party",
+  "Agreed / Approved",
+  // Existing records may still use these pre-workflow names.
+  "Submitted",
+  "Reviewed",
+]);
+
+function canRequestChanges(status, role, responsibleRole) {
+  return reviewStatuses.has(status) && role === responsibleRole;
+}
+
 function validateWorkflowTransition(previousStatus, nextStatus, role, responsibleRole) {
   const expectedRole = transitions[previousStatus]?.[nextStatus];
   if (!expectedRole) return { allowed: false, reason: "invalid-transition" };
@@ -17,4 +32,4 @@ function validateWorkflowTransition(previousStatus, nextStatus, role, responsibl
   return { allowed: true };
 }
 
-module.exports = { transitions, validateWorkflowTransition };
+module.exports = { transitions, validateWorkflowTransition, canRequestChanges };

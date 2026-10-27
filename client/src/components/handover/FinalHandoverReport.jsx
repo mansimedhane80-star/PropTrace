@@ -2,6 +2,7 @@ import { useState } from "react";
 import API_URL from "../../services/api";
 import ProtectedEvidenceImage from "./ProtectedEvidenceImage";
 import Logo from "../../Logo";
+import { getHandoverReportDocument } from "../../utils/handoverReport";
 
 function formatDate(value) {
   if (!value) return "Not provided";
@@ -14,6 +15,9 @@ function FinalHandoverReport({ inspection, onUpdated }) {
   const isLandlord = user?.role === "landlord";
   const isFinalized = inspection.status === "Finalized";
   const latestSnapshot = inspection.finalReportVersions?.[inspection.finalReportVersions.length - 1];
+  // A finalized report is an immutable document. Render its saved snapshot so
+  // later property/user edits and narrow populate projections cannot alter it.
+  const report = getHandoverReportDocument(inspection);
   const [finalNotes, setFinalNotes] = useState(inspection.finalNotes || "");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -77,35 +81,33 @@ function FinalHandoverReport({ inspection, onUpdated }) {
     finally { setBusy(false); }
   };
 
-  const property = inspection.property || {};
+  const property = report.property || {};
   const confirmationsComplete = inspection.tenantConfirmation?.confirmed && inspection.landlordConfirmation?.confirmed;
   const canAct = user?.role === inspection.responsibleRole && !isFinalized;
-  const history = inspection.statusHistory || [];
-  const evidence = inspection.evidence || [];
 
   return (
     <div className="handover-report-page">
       <header className="handover-document-brand"><Logo variant="compact" /><div><span className="brand-tagline">Record. Compare. Trust.</span><span>PROPERTY HANDOVER</span><h1>Final Handover Report</h1></div><button className="handover-button" type="button" onClick={() => window.print()}>Print / Save PDF</button></header>
-      <div className="handover-report-identifiers"><span>Report ID: {String(inspection._id).toUpperCase()}</span><span>Version: {latestSnapshot?.version || 1}</span><span className={"handover-status-pill handover-state-" + String(inspection.status || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}>{inspection.status}</span></div>
+      <div className="handover-report-identifiers"><span>Report ID: {String(inspection._id).toUpperCase()}</span><span>Version: {latestSnapshot?.version || 1}</span><span className={"handover-status-pill handover-state-" + String(report.status || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}>{report.status}</span></div>
       {latestSnapshot && !isFinalized && <aside className="handover-notice">Previous finalized version {latestSnapshot.version} remains preserved. This is a new working revision.</aside>}
       <section className="handover-report-block">
         <h2>Property and participants</h2>
         <div className="handover-detail-grid">
           <p><span>Property</span><strong>{property.propertyName || "Property details not provided"}</strong></p>
           <p><span>Address</span><strong>{[property.address, property.city, property.pincode].filter(Boolean).join(", ") || "Address not provided"}</strong></p>
-          <p><span>Inspection type</span><strong>{inspection.inspectionType}</strong></p>
-          <p><span>Inspection date</span><strong>{formatDate(inspection.inspectionDate)}</strong></p>
-          <p><span>Tenant</span><strong>{inspection.tenant?.name || "No tenant assigned"}</strong></p>
-          <p><span>Landlord</span><strong>{inspection.landlord?.name || "Landlord details unavailable"}</strong></p>
-          <p><span>Last updated</span><strong>{formatDate(inspection.updatedAt)}</strong></p>
-          <p><span>Last updated by</span><strong>{inspection.lastUpdatedBy?.name || "Not available"}</strong></p>
+          <p><span>Inspection type</span><strong>{report.inspectionType || "Not provided"}</strong></p>
+          <p><span>Inspection date</span><strong>{formatDate(report.inspectionDate)}</strong></p>
+          <p><span>Tenant</span><strong>{report.tenant?.name || "No tenant assigned"}</strong></p>
+          <p><span>Landlord</span><strong>{report.landlord?.name || "Landlord details unavailable"}</strong></p>
+          <p><span>Last updated</span><strong>{formatDate(report.updatedAt)}</strong></p>
+          <p><span>Last updated by</span><strong>{report.lastUpdatedBy?.name || report.finalizedBy?.name || "Not available"}</strong></p>
         </div>
       </section>
       <section className="handover-report-block">
         <h2>Room-by-room condition summary</h2>
-        {!inspection.items?.length ? <p className="handover-empty">No room or item conditions have been recorded.</p> : <div className="handover-report-table-wrap"><table className="handover-report-table"><thead><tr><th>Room or item</th><th>Condition</th><th>Observations</th></tr></thead><tbody>{inspection.items.map((item, index) => <tr key={item._id || index}><td>{item.itemName || "Item name not provided"}</td><td>{item.condition || "Not recorded"}</td><td>{item.description || "No observation provided"}</td></tr>)}</tbody></table></div>}
-        {inspection.generalNotes && <p><strong>Inspection notes:</strong> {inspection.generalNotes}</p>}
-        {inspection.meterReadings && <p><strong>Meter readings:</strong> Electricity {inspection.meterReadings.electricity || "not provided"} · Water {inspection.meterReadings.water || "not provided"} · Gas {inspection.meterReadings.gas || "not provided"}</p>}
+        {!report.items?.length ? <p className="handover-empty">No room or item conditions have been recorded.</p> : <div className="handover-report-table-wrap"><table className="handover-report-table"><thead><tr><th>Room or item</th><th>Condition</th><th>Observations</th></tr></thead><tbody>{report.items.map((item, index) => <tr key={item._id || index}><td>{item.itemName || "Item name not provided"}</td><td>{item.condition || "Not recorded"}</td><td>{item.description || "No observation provided"}</td></tr>)}</tbody></table></div>}
+        {report.generalNotes && <p><strong>Inspection notes:</strong> {report.generalNotes}</p>}
+        {report.meterReadings && <p><strong>Meter readings:</strong> Electricity {report.meterReadings.electricity || "not provided"} · Water {report.meterReadings.water || "not provided"} · Gas {report.meterReadings.gas || "not provided"}</p>}
       </section>
       <section className="handover-report-block">
         <h2>Furniture and appliances</h2>
@@ -113,20 +115,21 @@ function FinalHandoverReport({ inspection, onUpdated }) {
       </section>
       <section className="handover-report-block">
         <h2>Photo evidence and comparisons</h2>
-        {!evidence.length && <p className="handover-empty">No evidence photos were submitted.</p>}
-        <div className="handover-evidence-grid">{evidence.map((photo) => <article className="handover-evidence-card" key={photo._id}><ProtectedEvidenceImage inspectionId={inspection._id} evidence={photo} alt={photo.caption || photo.location} /><div className="handover-evidence-meta"><span>{photo.classification} · {photo.location}{photo.itemName ? " · " + photo.itemName : ""}</span><p>{photo.caption || "No caption provided."}</p><small>{formatDate(photo.uploadedAt)}</small></div></article>)}</div>
-        {(inspection.comparisons || []).map((comparison) => <div className="handover-comparison-summary" key={comparison._id}><h3>{comparison.location}{comparison.itemName ? " · " + comparison.itemName : ""}</h3><p><strong>Condition:</strong> {comparison.conditionBefore || "Not provided"} → {comparison.conditionAfter || "Not provided"}</p><p><strong>Observed differences:</strong> {comparison.observedDifferences || "Not provided"}</p><p><strong>Comments:</strong> {comparison.comments || "Not provided"}</p><p><strong>Outstanding concerns:</strong> {comparison.outstandingConcerns || "None recorded"}</p></div>)}
+        {!(report.evidence || []).length && <p className="handover-empty">No evidence photos were submitted.</p>}
+        <div className="handover-evidence-grid">{(report.evidence || []).map((photo) => <article className="handover-evidence-card" key={photo._id}><ProtectedEvidenceImage inspectionId={inspection._id} evidence={photo} alt={photo.caption || photo.location} /><div className="handover-evidence-meta"><span>{photo.classification} · {photo.location}{photo.itemName ? " · " + photo.itemName : ""}</span><p>{photo.caption || "No caption provided."}</p><small>{formatDate(photo.uploadedAt)}</small></div></article>)}</div>
+        {(report.comparisons || []).map((comparison) => <div className="handover-comparison-summary" key={comparison._id}><h3>{comparison.location}{comparison.itemName ? " · " + comparison.itemName : ""}</h3><p><strong>Condition:</strong> {comparison.conditionBefore || "Not provided"} → {comparison.conditionAfter || "Not provided"}</p><p><strong>Observed differences:</strong> {comparison.observedDifferences || "Not provided"}</p><p><strong>Comments:</strong> {comparison.comments || "Not provided"}</p><p><strong>Outstanding concerns:</strong> {comparison.outstandingConcerns || "None recorded"}</p></div>)}
       </section>
       <section className="handover-report-block">
         <h2>Reviews, disputes, and approvals</h2>
-        <p><strong>Tenant acknowledgment:</strong> {inspection.tenantConfirmation?.confirmed ? "Recorded " + formatDate(inspection.tenantConfirmation.confirmedAt) : "Not completed"}</p>
-        <p><strong>Landlord acknowledgment:</strong> {inspection.landlordConfirmation?.confirmed ? "Recorded " + formatDate(inspection.landlordConfirmation.confirmedAt) : "Not completed"}</p>
-        {inspection.dispute?.comment && <div className="handover-notice"><strong>Dispute:</strong> {inspection.dispute.comment}{inspection.dispute.resolvedAt ? " · Responded " + formatDate(inspection.dispute.resolvedAt) : " · Response pending"}</div>}
-        {!history.length ? <p className="handover-empty">No status history has been recorded.</p> : <ol className="handover-history">{history.map((entry, index) => <li key={entry._id || index}><strong>{entry.previousStatus || "New"} → {entry.newStatus}</strong><span>{entry.user?.name || entry.role || "Participant"} · {formatDate(entry.createdAt)}</span>{entry.comment && <p>{entry.comment}</p>}</li>)}</ol>}
+        <p><strong>Tenant acknowledgment:</strong> {report.tenantConfirmation?.confirmed ? "Recorded " + formatDate(report.tenantConfirmation.confirmedAt) : "Not completed"}</p>
+        <p><strong>Landlord acknowledgment:</strong> {report.landlordConfirmation?.confirmed ? "Recorded " + formatDate(report.landlordConfirmation.confirmedAt) : "Not completed"}</p>
+        {report.dispute?.comment && <div className="handover-notice"><strong>Dispute:</strong> {report.dispute.comment}{report.dispute.resolvedAt ? " · Responded " + formatDate(report.dispute.resolvedAt) : " · Response pending"}</div>}
+        {!(report.statusHistory || []).length ? <p className="handover-empty">No status history has been recorded.</p> : <ol className="handover-history">{report.statusHistory.map((entry, index) => <li key={entry._id || index}><strong>{entry.previousStatus || "New"} → {entry.newStatus}</strong><span>{entry.user?.name || entry.role || "Participant"} · {formatDate(entry.createdAt)}</span>{entry.comment && <p>{entry.comment}</p>}</li>)}</ol>}
       </section>
       <section className="handover-report-block handover-finalization">
         <h2>Final handover notes</h2>
-        <label className="handover-field">Final notes<textarea value={finalNotes} maxLength={3000} disabled={isFinalized} onChange={(event) => setFinalNotes(event.target.value)} rows={4} placeholder="Add final observations or unresolved items" /></label>
+        <p className="handover-final-notes-print">{report.finalNotes || "None provided"}</p>
+        <label className="handover-field handover-final-notes-editor">Final notes<textarea value={finalNotes} maxLength={3000} disabled={isFinalized} onChange={(event) => setFinalNotes(event.target.value)} rows={4} placeholder="Add final observations or unresolved items" /></label>
         <div className="handover-approval-checks"><span className={inspection.tenantConfirmation?.confirmed ? "approval-done" : ""}>Tenant acknowledgment {inspection.tenantConfirmation?.confirmed ? "complete" : "required"}</span><span className={inspection.landlordConfirmation?.confirmed ? "approval-done" : ""}>Landlord acknowledgment {inspection.landlordConfirmation?.confirmed ? "complete" : "required"}</span></div>
         {!isFinalized && !confirmationsComplete && <p className="handover-notice">This report cannot be finalized until both tenant and landlord approvals are recorded.</p>}
         {error && <p className="handover-error" role="alert">{error}</p>}
@@ -135,11 +138,12 @@ function FinalHandoverReport({ inspection, onUpdated }) {
         <div className="handover-report-actions">
           {canAct && inspection.status === "Draft" && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Inspection in Progress", "Start this inspection?")}>Start inspection</button>}
           {canAct && inspection.status === "Inspection in Progress" && isLandlord && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Awaiting Tenant Review", "Submit this handover report for tenant review?")}>Submit for tenant review</button>}
+          {canAct && inspection.status === "Submitted for Review" && isLandlord && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Awaiting Tenant Review", "Send this existing report to the tenant for review?")}>Send to tenant review</button>}
           {canAct && inspection.status === "Awaiting Tenant Review" && !isLandlord && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Awaiting Landlord Review", "Confirm that you have reviewed the report? This is an acknowledgment, not a legal signature.")}>Acknowledge review</button>}
           {canAct && inspection.status === "Awaiting Landlord Review" && isLandlord && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Agreed / Approved", "Record the landlord approval?")}>Approve report</button>}
           {canAct && inspection.status === "Agreed / Approved" && isLandlord && confirmationsComplete && <button className="handover-button handover-button-primary" disabled={busy} onClick={finalize}>Finalize handover</button>}
           {canAct && inspection.status === "Changes Requested" && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Inspection in Progress", "Mark the requested changes as being addressed?")}>Address requested changes</button>}
-          {!isFinalized && inspection.status !== "Draft" && <button className="handover-button handover-button-warning" disabled={busy} onClick={() => submitStatus("Changes Requested", "Request changes and assign the other party to respond?")}>Request changes</button>}
+          {canAct && !["Draft", "Inspection in Progress", "Changes Requested", "Disputed", "Finalized"].includes(inspection.status) && <button className="handover-button handover-button-warning" disabled={busy} onClick={() => submitStatus("Changes Requested", "Request changes and assign the other party to respond?")}>Request changes</button>}
           {!isFinalized && inspection.status !== "Draft" && inspection.status !== "Disputed" && <button className="handover-button handover-button-danger" disabled={busy} onClick={() => submitStatus("Disputed", "Raise a dispute and notify the other party?")}>Raise dispute</button>}
           {inspection.status === "Disputed" && canAct && <button className="handover-button handover-button-primary" disabled={busy} onClick={() => submitStatus("Changes Requested", "Record your response to this dispute?")}>Respond to dispute</button>}
           {isFinalized && isLandlord && <button className="handover-button handover-button-warning" disabled={busy} onClick={revise}>Open a new revision</button>}

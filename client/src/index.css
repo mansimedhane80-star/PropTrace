@@ -3654,7 +3654,17 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+
+.dashboard-summary-item:hover .summary-item-top span:first-child { color: #087f78; }
+.dashboard-summary-item:focus-visible { outline: 3px solid #0d9488; outline-offset: 5px; border-radius: 6px; }
 
 .dashboard-summary-item span {
   color: #71819a;
@@ -10344,7 +10354,46 @@ img { max-width: 100%; }
 .inspections-field input, .inspections-field select { min-height: 44px; }
 .inspections-field textarea { min-height: 90px; resize: vertical; }
 .inspections-page, .dashboard-page, .tenant-dashboard, .login-page, .register-page { overflow-x: clip; }
+
+/* Persistent landlord navigation shared by all authenticated landlord routes. */
+.landlord-app-shell { display:flex; height:100vh; height:100dvh; min-height:0; overflow:hidden; background:#f4f7fc; color:#1b2b49; }
+.landlord-app-sidebar { position:relative; flex:0 0 243px; width:243px; min-width:243px; height:100vh; height:100dvh; max-height:100vh; max-height:100dvh; min-height:0; display:flex; flex-direction:column; padding:22px 12px; overflow:hidden; background:#182d50; color:#fff; }
+.landlord-app-sidebar .sidebar-logo { display:flex; align-items:center; gap:12px; padding:0 9px 25px; margin-bottom:24px; border-bottom:1px solid rgba(255,255,255,.12); }
+.landlord-app-sidebar .sidebar-logo { flex:0 0 auto; }
+.landlord-app-sidebar .sidebar-logo > span { display:block; margin-top:5px; color:#b7c6df; font-size:12px; }
+.landlord-app-sidebar .sidebar-nav { display:flex; flex:1 1 auto; flex-direction:column; gap:7px; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#526986 transparent; }
+.landlord-app-sidebar .nav-item { width:100%; display:flex; align-items:center; gap:13px; min-height:43px; padding:12px 15px; border:0; border-radius:10px; background:transparent; color:#c4d0e3; font:550 14px Inter,"Segoe UI",Arial,sans-serif; text-align:left; cursor:pointer; }
+.landlord-app-sidebar .sidebar-nav .nav-item { flex:0 0 auto; }
+.landlord-app-sidebar .nav-item span { display:inline-flex; align-items:center; justify-content:center; width:18px; flex-shrink:0; font-size:16px; }
+.landlord-app-sidebar .nav-item:hover { background:rgba(255,255,255,.09); color:#fff; }
+.landlord-app-sidebar .nav-item.active { background:#2b7be9; color:#fff; font-weight:650; }
+.landlord-app-sidebar .sidebar-bottom { display:flex; flex:0 0 auto; flex-direction:column; gap:7px; margin-top:auto; padding-top:16px; }
+.landlord-app-content { flex:1 1 auto; width:0; height:100vh; height:100dvh; min-width:0; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
+.landlord-menu-toggle { display:none; }
+.inspection-review-panel { margin:16px 0; padding:16px; border:1px solid #d6e0ed; border-radius:12px; background:#f8fbff; }
+.inspection-review-panel h4 { margin:0 0 10px; }
+.inspection-review-panel textarea { display:block; width:100%; margin:8px 0 12px; padding:10px; border:1px solid #c8d4e3; border-radius:8px; font:inherit; }
+.inspection-review-actions { display:flex; flex-wrap:wrap; gap:8px; }
+@media (max-width:760px) {
+  .landlord-app-shell { display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  .landlord-menu-toggle { display:block; position:relative; z-index:12; flex:0 0 auto; margin:0; padding:10px 16px; border:0; background:#182d50; color:white; font:600 14px Inter,"Segoe UI",Arial,sans-serif; text-align:left; }
+  .landlord-app-content { width:100%; height:auto; flex:1 1 auto; min-height:0; }
+  .landlord-app-sidebar { display:none; position:fixed; inset:42px 0 auto; z-index:11; width:100%; height:auto; max-height:calc(100vh - 42px); max-height:calc(100dvh - 42px); min-height:0; padding:12px; overflow-y:auto; box-shadow:0 10px 20px #10223d40; }
+  .landlord-app-sidebar.is-open { display:flex; }
+  .landlord-app-sidebar .sidebar-logo { padding-bottom:12px; margin-bottom:10px; }
+  .landlord-app-sidebar .sidebar-nav { display:grid; flex:0 1 auto; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; min-height:auto; overflow:visible; }
+  .landlord-app-sidebar .nav-item { min-height:40px; padding:9px; }
+  .landlord-app-sidebar .sidebar-bottom { flex-direction:row; margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,.12); }
+}
 .inspection-card, .landlord-report-card, .tenant-panel, .tenant-property-card { min-width: 0; }
+.handover-final-notes-print { display: none; }
+@media print {
+  .handover-final-notes-editor { display: none !important; }
+  .handover-final-notes-print { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .handover-report-page table { break-inside: auto; }
+  .handover-report-page tr, .handover-report-page img { break-inside: avoid; }
+  .handover-report-page h1, .handover-report-page h2, .handover-report-page h3 { break-after: avoid; }
+}
 @media (max-width: 640px) {
   .inspection-photo-grid img { width: 88px; height: 72px; }
 .inspection-status-actions { flex-wrap: wrap; }

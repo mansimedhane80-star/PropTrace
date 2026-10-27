@@ -5,7 +5,7 @@ const mongoose = require("mongoose");
 const Inspection = require("../models/Inspection");
 const Property = require("../models/Property");
 const User = require("../models/User");
-const { transitions, validateWorkflowTransition } = require("../services/handoverWorkflow");
+const { transitions, validateWorkflowTransition, canRequestChanges } = require("../services/handoverWorkflow");
 
 const evidenceDirectory = path.join(__dirname, "..", "uploads", "evidence");
 const imageTypes = {
@@ -49,6 +49,9 @@ const transitionStatus = async (req, res) => {
     if (inspection.status === "Finalized") return res.status(409).json({ message: "Finalized reports are locked. Start an authorized revision to make changes." });
 
     const previousStatus = inspection.status;
+    if (status === "Awaiting Tenant Review" && !inspection.tenant) {
+      return res.status(409).json({ message: "Assign a tenant to this property before requesting tenant review." });
+    }
     let responsibleRole = inspection.responsibleRole || "landlord";
     let tenantConfirmed = inspection.tenantConfirmation && inspection.tenantConfirmation.confirmed;
     let landlordConfirmed = inspection.landlordConfirmation && inspection.landlordConfirmation.confirmed;
@@ -71,7 +74,7 @@ const transitionStatus = async (req, res) => {
       landlordConfirmed = false;
       action = "Dispute response recorded";
     } else if (status === "Changes Requested") {
-      if (["Draft", "Finalized", "Disputed"].includes(previousStatus)) return res.status(400).json({ message: "Changes cannot be requested from this report state." });
+      if (!canRequestChanges(previousStatus, req.user.role, responsibleRole)) return res.status(403).json({ message: "Only the responsible reviewer can request changes while the report is awaiting review." });
       if (!comment.trim()) return res.status(400).json({ message: "Add a comment describing the changes needed." });
       responsibleRole = otherParty(req.user.role);
       tenantConfirmed = false;
@@ -311,6 +314,8 @@ const finalizeReport = async (req, res) => {
       User.findById(inspection.landlord).select("name email"),
     ]);
     const version = (inspection.finalReportVersions?.length || 0) + 1;
+    const history = { previousStatus: inspection.status, newStatus: "Finalized", user: req.user.id, role: req.user.role, comment, createdAt: finalizedAt };
+    const activity = { actor: req.user.id, role: req.user.role, action: "Handover report finalized (version " + version + ")", note: comment, createdAt: finalizedAt };
     const snapshot = {
       version,
       finalizedAt,
@@ -327,14 +332,13 @@ const finalizeReport = async (req, res) => {
       generalNotes: inspection.generalNotes,
       evidence: inspection.evidence.map((photo) => photo.toObject()),
       comparisons: inspection.comparisons.map((item) => item.toObject()),
-      statusHistory: inspection.statusHistory.map((entry) => entry.toObject()),
+      statusHistory: [...inspection.statusHistory.map((entry) => entry.toObject()), history],
       tenantConfirmation: inspection.tenantConfirmation?.toObject?.() || inspection.tenantConfirmation,
       landlordConfirmation: inspection.landlordConfirmation?.toObject?.() || inspection.landlordConfirmation,
       dispute: inspection.dispute?.toObject?.() || inspection.dispute,
-      activity: inspection.activity.map((entry) => entry.toObject()),
+      activity: [...inspection.activity.map((entry) => entry.toObject()), activity],
       finalNotes,
     };
-    const history = { previousStatus: inspection.status, newStatus: "Finalized", user: req.user.id, role: req.user.role, comment, createdAt: finalizedAt };
     const updated = await Inspection.findOneAndUpdate(
       { _id: inspection._id, revision: inspection.revision, status: "Agreed / Approved" },
       {
@@ -343,7 +347,7 @@ const finalizeReport = async (req, res) => {
         $push: {
           statusHistory: history,
           finalReportVersions: snapshot,
-          activity: { actor: req.user.id, role: req.user.role, action: "Handover report finalized (version " + version + ")", note: comment, createdAt: finalizedAt },
+          activity,
         },
       },
       { new: true, runValidators: true },

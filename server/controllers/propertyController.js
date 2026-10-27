@@ -147,7 +147,9 @@ const createProperty = async (req, res) => {
         });
       }
 
-      propertyData.furniture = furniture;
+      propertyData.furniture = furnishingStatus === "Unfurnished" ? [] : furniture;
+    } else if (furnishingStatus === "Unfurnished") {
+      propertyData.furniture = [];
     }
 
     if (monthlyRent !== undefined) {
@@ -432,6 +434,10 @@ const updateProperty = async (req, res) => {
       if (req.body[field] !== undefined) {
         property.set(field, req.body[field]);
       }
+    }
+
+    if (property.furnishingStatus === "Unfurnished") {
+      property.furniture = [];
     }
 
     // Validate lease dates

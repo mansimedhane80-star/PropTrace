@@ -2,6 +2,7 @@
 const crypto = require("crypto");
 const Invitation = require("../models/Invitation");
 const Property = require("../models/Property");
+const { validateInvitation, invitationFailureMessage } = require("../services/invitationValidation");
 
 const createInvitation = async (req, res) => {
   try {
@@ -65,13 +66,12 @@ const createInvitation = async (req, res) => {
         status: invitation.status,
         expiresAt: invitation.expiresAt,
       },
-      // Temporary development link; we will build acceptance next.
-      invitationLink: `http://localhost:5173/accept-invitation/${token}`,
+      invitationLink: `${(process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "")}/accept-invitation/${token}`,
     });
   } catch (error) {
+    console.error("Invitation creation failed.");
     res.status(500).json({
       message: "Failed to create invitation",
-      error: error.message,
     });
   }
 };
@@ -79,28 +79,17 @@ const createInvitation = async (req, res) => {
 
 const acceptInvitation = async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = typeof req.params.token === "string" ? req.params.token.trim() : "";
 
     const invitation = await Invitation.findOne({ token });
-
-    if (!invitation) {
-      return res.status(404).json({
-        message: "Invalid invitation link",
-      });
-    }
-
-    if (invitation.status !== "Pending") {
-      return res.status(400).json({
-        message: "This invitation has already been used or is no longer valid",
-      });
-    }
-
-    if (invitation.expiresAt <= new Date()) {
-      invitation.status = "Expired";
-      await invitation.save();
-
-      return res.status(400).json({
-        message: "This invitation has expired",
+    const validation = validateInvitation(invitation, { token, email: invitation?.tenantEmail });
+    if (!validation.valid) {
+      if (validation.reason === "expired" && invitation.status === "Pending") {
+        invitation.status = "Expired";
+        await invitation.save();
+      }
+      return res.status(validation.reason === "invalid-token" ? 404 : 400).json({
+        message: invitationFailureMessage(validation.reason),
       });
     }
 
@@ -110,9 +99,9 @@ const acceptInvitation = async (req, res) => {
       propertyId: invitation.property,
     });
   } catch (error) {
+    console.error("Invitation verification failed.");
     res.status(500).json({
       message: "Failed to verify invitation",
-      error: error.message,
     });
   }
 };

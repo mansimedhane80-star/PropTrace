@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
@@ -16,6 +16,7 @@ import FinalHandoverPage from "./pages/shared/FinalHandoverPage";
 import ResetPassword from "./pages/auth/ResetPassword";
 
 import TenantDashboard from "./pages/tenant/Dashboard";
+import LandlordLayout from "./components/LandlordLayout";
 
 const VALID_PAGES = new Set([
   "login",
@@ -34,6 +35,24 @@ const VALID_PAGES = new Set([
   "finalHandover",
   "resetPassword",
 ]);
+
+const PROTECTED_PAGES = new Set([
+  "dashboard", "addProperty", "settings", "profile", "reports", "inviteTenant",
+  "properties", "propertyDetails", "inspections", "tenantDashboard", "finalHandover",
+]);
+
+const LANDLORD_PAGES = new Set([
+  "dashboard", "addProperty", "settings", "profile", "reports", "inviteTenant", "properties",
+  "propertyDetails", "inspections",
+]);
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return null;
+  }
+}
 
 function getInvitationToken() {
   const match = window.location.pathname.match(
@@ -87,7 +106,50 @@ function getCurrentRoute() {
 
 function App() {
   const [route, setRoute] = useState(getCurrentRoute);
-  const { page, propertyId, invitationToken, resetToken } = route;
+  const { page: routePage, propertyId, invitationToken, resetToken } = route;
+  const user = readStoredUser();
+  const token = localStorage.getItem("token");
+  const role = user?.role;
+  const isAuthenticated = Boolean(token && user?.id && ["landlord", "tenant"].includes(role));
+  const page = PROTECTED_PAGES.has(routePage)
+    ? !isAuthenticated
+      ? "login"
+      : LANDLORD_PAGES.has(routePage) && role !== "landlord"
+        ? "tenantDashboard"
+        : routePage === "tenantDashboard" && role !== "tenant"
+          ? "dashboard"
+          : routePage
+    : routePage;
+
+  const navigateTo = useCallback((nextPage, options = {}) => {
+    if (!VALID_PAGES.has(nextPage)) return;
+
+    let url;
+
+    if (nextPage === "login") {
+      url = "/";
+    } else if (nextPage === "properties") {
+      url = "/properties";
+    } else if (nextPage === "propertyDetails" && options.propertyId) {
+      url = `/properties/${encodeURIComponent(options.propertyId)}`;
+    } else if (nextPage === "acceptInvitation" && options.token) {
+      url = `/accept-invitation/${encodeURIComponent(options.token)}`;
+    } else {
+      url = `/?page=${encodeURIComponent(nextPage)}`;
+    }
+
+    window.history.pushState(
+      { page: nextPage, propertyId: options.propertyId || "" },
+      "",
+      url
+    );
+
+    setRoute({
+      page: nextPage,
+      propertyId: options.propertyId || "",
+      invitationToken: options.token || "",
+    });
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -102,6 +164,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (page === routePage) return;
+    const url = page === "login" ? "/" : `/?page=${encodeURIComponent(page)}`;
+    window.history.replaceState({ page }, "", url);
+  }, [page, routePage]);
+
+  useEffect(() => {
     if (!invitationToken) return;
 
     window.history.replaceState(
@@ -110,45 +178,6 @@ function App() {
       window.location.pathname
     );
   }, [invitationToken]);
-
-  const navigateTo = (nextPage, options = {}) => {
-    if (!VALID_PAGES.has(nextPage)) return;
-
-    let url;
-
-    if (nextPage === "login") {
-      url = "/";
-    } else if (nextPage === "properties") {
-      url = "/properties";
-    } else if (
-      nextPage === "propertyDetails" &&
-      options.propertyId
-    ) {
-      url = `/properties/${encodeURIComponent(options.propertyId)}`;
-    } else if (
-      nextPage === "acceptInvitation" &&
-      options.token
-    ) {
-      url = `/accept-invitation/${encodeURIComponent(options.token)}`;
-    } else {
-      url = `/?page=${encodeURIComponent(nextPage)}`;
-    }
-
-    window.history.pushState(
-      {
-        page: nextPage,
-        propertyId: options.propertyId || "",
-      },
-      "",
-      url
-    );
-
-    setRoute({
-      page: nextPage,
-      propertyId: options.propertyId || "",
-      invitationToken: options.token || "",
-    });
-  };
 
   const handleLoginSuccess = (user) => {
     navigateTo(
@@ -170,6 +199,9 @@ function App() {
   const backToProperties = () => {
     navigateTo("properties");
   };
+  const withLandlordLayout = (content) => role === "landlord"
+    ? <LandlordLayout page={page} navigateTo={navigateTo} onLogout={goToLogin}>{content}</LandlordLayout>
+    : content;
 
   if (page === "login") {
     return (
@@ -204,13 +236,13 @@ function App() {
   }
 
   if (page === "tenantDashboard") {
-    return <TenantDashboard user={JSON.parse(localStorage.getItem("user") || "null")} onLogout={goToLogin} />;
+    return <TenantDashboard user={user} onLogout={goToLogin} />;
   }
 
   if (page === "dashboard") {
-    return (
+    return withLandlordLayout(
       <Dashboard
-        user={JSON.parse(localStorage.getItem("user") || "null")}
+        user={user}
         onLogout={goToLogin}
         onProperties={() => navigateTo("properties")}
         onAddProperty={() => navigateTo("addProperty")}
@@ -225,7 +257,7 @@ function App() {
   }
 
   if (page === "properties" || page === "addProperty") {
-    return (
+    return withLandlordLayout(
       <Properties
         mode={page === "addProperty" ? "add" : undefined}
         onBack={() => navigateTo("dashboard")}
@@ -236,7 +268,7 @@ function App() {
   }
 
   if (page === "propertyDetails") {
-    return (
+    return withLandlordLayout(
       <Properties
         propertyId={propertyId}
         onBack={backToProperties}
@@ -247,27 +279,27 @@ function App() {
   }
 
   if (page === "settings") {
-    return <Settings onBack={() => navigateTo("dashboard")} />;
+    return withLandlordLayout(<Settings onBack={() => navigateTo("dashboard")} />);
   }
 
   if (page === "profile") {
-    return <Profile user={JSON.parse(localStorage.getItem("user") || "null")} />;
+    return withLandlordLayout(<Profile user={user} />);
   }
 
   if (page === "reports") {
-    return <Reports onBack={() => navigateTo("dashboard")} />;
+    return withLandlordLayout(<Reports onBack={() => navigateTo("dashboard")} />);
   }
 
   if (page === "inviteTenant") {
-    return <InviteTenant />;
+    return withLandlordLayout(<InviteTenant />);
   }
 
   if (page === "inspections") {
-    return <Inspections onBack={() => navigateTo("dashboard")} />;
+    return withLandlordLayout(<Inspections onBack={() => navigateTo("dashboard")} />);
   }
 
   if (page === "finalHandover") {
-    return <FinalHandoverPage />;
+    return withLandlordLayout(<FinalHandoverPage />);
   }
 
   return (

@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Invitation = require("../models/Invitation");
 const Property = require("../models/Property");
 const crypto = require("crypto");
+const { validateInvitation, invitationFailureMessage } = require("../services/invitationValidation");
 
 
 const registerUser = async (req, res) => {
@@ -29,22 +30,26 @@ const registerUser = async (req, res) => {
 
         // Tenants must register through a valid invitation.
         if (role === "tenant") {
-            if (!invitationToken) {
+            const normalizedInvitationToken = typeof invitationToken === "string" ? invitationToken.trim() : "";
+            if (!normalizedInvitationToken) {
                 return res.status(400).json({
                     message: "A valid invitation is required"
                 });
             }
 
-            invitation = await Invitation.findOne({
-                token: invitationToken,
-                tenantEmail: normalizedEmail,
-                status: "Pending",
-                expiresAt: { $gt: new Date() }
+            invitation = await Invitation.findOne({ token: normalizedInvitationToken });
+            const validation = validateInvitation(invitation, {
+                token: normalizedInvitationToken,
+                email: normalizedEmail,
             });
 
-            if (!invitation) {
+            if (!validation.valid) {
+                if (validation.reason === "expired" && invitation.status === "Pending") {
+                    invitation.status = "Expired";
+                    await invitation.save();
+                }
                 return res.status(400).json({
-                    message: "Invalid, expired, or mismatched invitation"
+                    message: invitationFailureMessage(validation.reason)
                 });
             }
 
@@ -113,9 +118,9 @@ const registerUser = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Registration failed.");
         res.status(500).json({
-            message: "Registration failed",
-            error: error.message
+            message: "Registration failed"
         });
     }
 };
@@ -180,9 +185,9 @@ const loginUser = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Login failed.");
         res.status(500).json({
-            message: "Login failed",
-            error: error.message
+            message: "Login failed"
         });
     }
 };

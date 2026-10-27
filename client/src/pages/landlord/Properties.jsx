@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import API_URL from "../../services/api";
 import Logo from "../../Logo";
+import { buildFurniturePayload, shouldShowFurniture } from "../../utils/propertyForm";
 
 const emptyForm = {
   propertyName: "",
@@ -253,13 +254,7 @@ function Properties({ onBack, onPropertyDetails, propertyId, mode = "list" }) {
       return;
     }
 
-    const inventory = furniture
-      .filter((item) => item.name.trim())
-      .map((item) => ({
-        ...item,
-        name: item.name.trim(),
-        quantity: Number(item.quantity),
-      }));
+    const inventory = buildFurniturePayload(form.furnishingStatus, furniture);
 
     if (
       inventory.some(
@@ -553,7 +548,7 @@ function Properties({ onBack, onPropertyDetails, propertyId, mode = "list" }) {
                   </div>
                 </div>
 
-                <div className="properties-form-section">
+                {shouldShowFurniture(form.furnishingStatus) && <div className="properties-form-section">
                   <div className="properties-section-heading">
                     <div>
                       <h3>03. Furniture and Appliances</h3>
@@ -647,7 +642,7 @@ function Properties({ onBack, onPropertyDetails, propertyId, mode = "list" }) {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div>}
 
                 <div className="properties-form-section">
                   <h3>04. Rental and Lease Information</h3>

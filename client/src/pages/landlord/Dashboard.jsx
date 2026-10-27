@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react";
 import API_URL from "../../services/api";
-import Logo from "../../Logo";
+import { dashboardSummaryActions } from "../../utils/dashboardSummary";
 
 function getInitials(name, email) {
   const source = String(name || email || "").trim();
@@ -12,15 +12,12 @@ function getInitials(name, email) {
 
 function Dashboard({
   user,
-  onLogout,
   onProfile,
-  onSettings,
   onReports,
   onInviteTenant,
   onProperties,
   onAddProperty,
   onInspections,
-  onFinalHandover,
 }) {
   const [summary, setSummary] = useState({
     properties: null,
@@ -138,7 +135,7 @@ function Dashboard({
               typeof tenantData.count === "number"
                 ? tenantData.count
                 : tenants.length,
-            inspections: inspections.filter((inspection) => !["Agreed / Approved", "Completed"].includes(inspection.status)).length,
+            inspections: Math.max(0, (inspectionData.count ?? inspections.length) - (inspectionData.summary?.finalized || 0)),
             reports: openReports,
           });
 
@@ -166,140 +163,41 @@ function Dashboard({
     }
   };
 
+  const summaryActionHandlers = { properties: onProperties, inviteTenant: onInviteTenant, inspections: onInspections, reports: onReports };
   const summaryItems = [
     {
       title: "Total Properties",
       value: summary.properties,
       icon: "🏠",
       color: "blue",
+      onClick: summaryActionHandlers[dashboardSummaryActions["Total Properties"]],
     },
     {
       title: "Active Tenants",
       value: summary.tenants,
       icon: "👥",
       color: "green",
+      onClick: summaryActionHandlers[dashboardSummaryActions["Active Tenants"]],
     },
     {
       title: "Pending Inspections",
       value: summary.inspections,
       icon: "📋",
       color: "purple",
+      onClick: summaryActionHandlers[dashboardSummaryActions["Pending Inspections"]],
     },
     {
       title: "Open Reports",
       value: summary.reports,
       icon: "📄",
       color: "amber",
+      onClick: summaryActionHandlers[dashboardSummaryActions["Open Reports"]],
     },
   ];
 
   return (
     <div className="dashboard-page">
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <Logo />
-          <small className="sidebar-tagline">Record. Compare. Trust.</small>
-          <span>Landlord</span>
-        </div>
 
-        <nav className="sidebar-nav" aria-label="Main navigation">
-          <div className="nav-item active" aria-current="page">
-            <span aria-hidden="true">▦</span>
-            Dashboard
-          </div>
-
-          <div
-            className="nav-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onProperties?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onProperties)
-            }
-          >
-            <span aria-hidden="true">🏠</span>
-            Properties
-          </div>
-
-          <div
-            className="nav-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onInviteTenant?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onInviteTenant)
-            }
-          >
-            <span aria-hidden="true">👥</span>
-            Tenants
-          </div>
-
-          <div
-            className="nav-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onInspections?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onInspections)
-            }
-          >
-            <span aria-hidden="true">📋</span>
-            Inspections
-          </div>
-
-          
-          <div
-            className="nav-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onReports?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onReports)
-            }
-          >
-            <span aria-hidden="true">📄</span>
-            Reports
-          </div>
-          <div
-            className="nav-item nav-item-handover"
-            role="button"
-            tabIndex={0}
-            onClick={() => onFinalHandover?.()}
-            onKeyDown={(event) => handleKeyboardClick(event, onFinalHandover)}
-          >
-            <span aria-hidden="true">✦</span>
-            Final Handover
-          </div>
-        </nav>
-
-        <div className="sidebar-bottom">
-          <div
-            className="nav-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onSettings?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onSettings)
-            }
-          >
-            <span aria-hidden="true">⚙️</span>
-            Settings
-          </div>
-
-          <div
-            className="nav-item logout-item"
-            role="button"
-            tabIndex={0}
-            onClick={() => onLogout?.()}
-            onKeyDown={(event) =>
-              handleKeyboardClick(event, onLogout)
-            }
-          >
-            <span aria-hidden="true">↪</span>
-            Logout
-          </div>
-        </div>
-      </aside>
 
       <main className="dashboard-main">
         <header className="dashboard-header">
@@ -338,9 +236,12 @@ function Dashboard({
 
         <section className="dashboard-summary">
           {summaryItems.map((item) => (
-            <div
+            <button
+              type="button"
               className={`dashboard-summary-item summary-${item.color}`}
               key={item.title}
+              onClick={item.onClick}
+              aria-label={`${item.title}: ${item.value === null ? "loading" : item.value}`}
             >
               <div className="summary-item-top">
                 <span>{item.title}</span>
@@ -352,7 +253,7 @@ function Dashboard({
               <strong>
                 {item.value === null ? "…" : item.value}
               </strong>
-            </div>
+            </button>
           ))}
         </section>
 

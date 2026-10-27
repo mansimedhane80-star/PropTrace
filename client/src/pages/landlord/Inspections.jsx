@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import API_URL from "../../services/api";
 import BrandHeader from "../../components/BrandHeader";
+import { selectAvailableProperty } from "../../utils/inspectionForm";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -43,6 +44,8 @@ function Inspections() {
   const [gas, setGas] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [propertiesLoading, setPropertiesLoading] = useState(true);
+  const [propertiesError, setPropertiesError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [updatingInspectionId, setUpdatingInspectionId] = useState("");
   const [error, setError] = useState("");
@@ -50,6 +53,8 @@ function Inspections() {
   const [showForm, setShowForm] = useState(false);
   const [editingInspectionId, setEditingInspectionId] = useState("");
   const [editingRevision, setEditingRevision] = useState(0);
+  const [reviewingInspectionId, setReviewingInspectionId] = useState("");
+  const [reviewComments, setReviewComments] = useState({});
 
   const token = localStorage.getItem("token");
 
@@ -71,45 +76,32 @@ function Inspections() {
         fetch(`${API_URL}/properties`, { headers }),
         fetch(`${API_URL}/inspections`, { headers }),
       ]);
-
-      const [propertyData, inspectionData] = await Promise.all([
-        propertyResponse.json(),
-        inspectionResponse.json(),
-      ]);
-
-      if (!propertyResponse.ok) {
-        throw new Error(
-          propertyData.message || "Failed to load properties."
-        );
+      const [propertyData, inspectionData] = await Promise.all([propertyResponse.json(), inspectionResponse.json()]);
+      const failures = [];
+      if (propertyResponse.ok) {
+        const propertyList = Array.isArray(propertyData.properties) ? propertyData.properties : [];
+        setProperties(propertyList);
+        setPropertiesError("");
+        setPropertyId((current) => selectAvailableProperty(propertyList, current));
+        setComparisonPropertyId((current) => selectAvailableProperty(propertyList, current));
+      } else {
+        setProperties([]);
+        setPropertiesError(propertyData.message || "Failed to load properties.");
+        setPropertyId("");
+        setComparisonPropertyId("");
       }
-
-      if (!inspectionResponse.ok) {
-        throw new Error(
-          inspectionData.message || "Failed to load inspections."
-        );
+      setPropertiesLoading(false);
+      if (inspectionResponse.ok) {
+        setInspections(Array.isArray(inspectionData.inspections) ? inspectionData.inspections : []);
+      } else {
+        failures.push(inspectionData.message || "Failed to load inspections.");
       }
-
-      const propertyList = propertyData.properties || [];
-      const inspectionList = inspectionData.inspections || [];
-
-      setProperties(propertyList);
-      setInspections(inspectionList);
-
-      setPropertyId((current) =>
-        propertyList.some((property) => property._id === current)
-          ? current
-          : propertyList[0]?._id || ""
-      );
-
-      setComparisonPropertyId((current) =>
-        propertyList.some((property) => property._id === current)
-          ? current
-          : propertyList[0]?._id || ""
-      );
+      if (failures.length) throw new Error(failures.join(" "));
     } catch (err) {
       setError(err.message || "Failed to load inspection information.");
     } finally {
       setLoading(false);
+      setPropertiesLoading(false);
     }
   }, [token]);
 
@@ -271,7 +263,7 @@ function Inspections() {
   };
 
   // Change the inspection status through the backend
-  const handleStatusUpdate = async (inspectionId, nextStatus) => {
+  const handleStatusUpdate = async (inspectionId, nextStatus, comment = "") => {
     setError("");
     setSuccess("");
     setUpdatingInspectionId(inspectionId);
@@ -289,7 +281,7 @@ function Inspections() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ status: nextStatus, expectedRevision: inspections.find((inspection) => inspection._id === inspectionId)?.revision ?? 0 }),
+          body: JSON.stringify({ status: nextStatus, comment, expectedRevision: inspections.find((inspection) => inspection._id === inspectionId)?.revision ?? 0 }),
         }
       );
 
@@ -473,9 +465,9 @@ function Inspections() {
                       setPropertyId(event.target.value)
                     }
                     required
-                    disabled={properties.length === 0}
+                    disabled={propertiesLoading || Boolean(propertiesError) || properties.length === 0}
                   >
-                    <option value="">Select a property</option>
+                    <option value="">{propertiesLoading ? "Loading properties…" : propertiesError ? "Properties unavailable" : properties.length ? "Select a property" : "No properties available"}</option>
 
                     {properties.map((property) => (
                       <option key={property._id} value={property._id}>
@@ -483,6 +475,8 @@ function Inspections() {
                       </option>
                     ))}
                   </select>
+                  {propertiesError && <p className="inspections-message inspections-error" role="alert">{propertiesError}</p>}
+                  {!propertiesLoading && !propertiesError && properties.length === 0 && <p className="inspections-empty">Add a property before creating an inspection.</p>}
                 </div>
 
                 <div className="inspections-field">
@@ -932,14 +926,14 @@ function Inspections() {
                           </>
                         )}
 
-                        {inspection.status === "Inspection in Progress" && <><button type="button" className="inspections-secondary-button" onClick={() => editInspection(inspection)}>Edit</button><button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => handleStatusUpdate(inspection._id, "Submitted for Review")}>Submit for Review</button></>}
+                        {inspection.status === "Inspection in Progress" && <><button type="button" className="inspections-secondary-button" onClick={() => editInspection(inspection)}>Edit</button><button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => handleStatusUpdate(inspection._id, "Awaiting Tenant Review")}>Submit for tenant review</button></>}
 
-                        {inspection.status === "Changes Requested" && <><button type="button" className="inspections-secondary-button" onClick={() => editInspection(inspection)}>Edit Requested Changes</button><button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => handleStatusUpdate(inspection._id, "Inspection in Progress")}>Resume Inspection</button></>}
+                        {inspection.status === "Changes Requested" && <><button type="button" className="inspections-secondary-button" onClick={() => editInspection(inspection)}>Edit Requested Changes</button><button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => handleStatusUpdate(inspection._id, "Inspection in Progress", "Requested changes have been addressed.")}>Resume Inspection</button></>}
 
                         {inspection.status === "Submitted for Review" && (
-                          <span className="inspection-status-hint">
-                            Waiting for tenant review
-                          </span>
+                          <button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => handleStatusUpdate(inspection._id, "Awaiting Tenant Review")}>
+                            Send to tenant review
+                          </button>
                         )}
 
                         {inspection.status === "Awaiting Other Party" && (
@@ -959,8 +953,29 @@ function Inspections() {
                               : "Approve & Finalize"}
                           </button>
                         )}
+
+                        {inspection.status === "Awaiting Landlord Review" && (
+                          <button type="button" className="inspections-primary-button" disabled={isUpdating} onClick={() => setReviewingInspectionId((current) => current === inspection._id ? "" : inspection._id)}>
+                            {reviewingInspectionId === inspection._id ? "Close review" : "Review tenant response"}
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {inspection.status === "Awaiting Landlord Review" && reviewingInspectionId === inspection._id && (
+                      <section className="inspection-review-panel" aria-label="Tenant review response">
+                        <h4>Tenant review response</h4>
+                        {(inspection.statusHistory || []).filter((entry) => entry.role === "tenant" && entry.comment).slice().reverse().map((entry, index) => (
+                          <p key={`${entry._id || entry.createdAt}-${index}`}><strong>{entry.newStatus || "Tenant comment"}:</strong> {entry.comment}</p>
+                        ))}
+                        {(inspection.statusHistory || []).every((entry) => entry.role !== "tenant" || !entry.comment) && <p>The tenant confirmed the inspection. No additional note was provided.</p>}
+                        <label htmlFor={`landlord-review-comment-${inspection._id}`}>Your response note</label>
+                        <textarea id={`landlord-review-comment-${inspection._id}`} rows={3} value={reviewComments[inspection._id] || ""} onChange={(event) => setReviewComments((current) => ({ ...current, [inspection._id]: event.target.value }))} placeholder="Add an acknowledgment or explain the changes needed" />
+                        <div className="inspection-review-actions">
+                          <button type="button" className="inspections-primary-button" disabled={isUpdating || !reviewComments[inspection._id]?.trim()} onClick={() => handleStatusUpdate(inspection._id, "Agreed / Approved", reviewComments[inspection._id])}>Approve tenant review</button>
+                        </div>
+                      </section>
+                    )}
 
                     <div className="inspection-card-details">
                       <p>

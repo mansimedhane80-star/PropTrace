@@ -65,6 +65,11 @@ function Reports() {
   }, [loadReports]);
 
   const updateStatus = async (reportId, status) => {
+    let resolutionNote;
+    if (status === "Resolved") {
+      resolutionNote = window.prompt("Add a resolution note (optional):");
+      if (resolutionNote === null) return;
+    }
     setUpdatingId(reportId);
     setError("");
     setMessage("");
@@ -76,7 +81,7 @@ function Reports() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(resolutionNote !== undefined ? { resolutionNote } : {}) }),
       });
 
       const data = await response.json();
@@ -218,10 +223,10 @@ function Reports() {
                         updateStatus(report._id, event.target.value)
                       }
                     >
-                      <option value="Pending">Pending</option>
-                      <option value="Acknowledged">Acknowledged</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Resolved">Resolved</option>
+                      <option value={report.status}>{report.status}</option>
+                      {report.status === "Pending" && <option value="Acknowledged">Acknowledge</option>}
+                      {report.status === "Acknowledged" && <option value="In Progress">Mark in progress</option>}
+                      {report.status === "In Progress" && <option value="Resolved">Resolve</option>}
                     </select>
 
                     {updatingId === report._id && <span>Updating...</span>}

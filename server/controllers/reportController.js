@@ -1,6 +1,7 @@
 
 const Report = require("../models/Report");
 const Property = require("../models/Property");
+const { isAllowedMaintenanceTransition } = require("../services/maintenanceWorkflow");
 
 // @desc   Submit a report for an assigned property
 // @route  POST /api/reports/:propertyId
@@ -137,13 +138,7 @@ const updateReportStatus = async (req, res) => {
 
     const { status, resolutionNote } = req.body;
 
-    const allowedStatuses = [
-      "Acknowledged",
-      "In Progress",
-      "Resolved",
-    ];
-
-    if (!allowedStatuses.includes(status)) {
+    if (typeof status !== "string") {
       return res.status(400).json({
         message: "Invalid report status",
       });
@@ -161,17 +156,29 @@ const updateReportStatus = async (req, res) => {
       });
     }
 
-    report.status = status;
-
-    if (resolutionNote !== undefined) {
-      report.resolutionNote = resolutionNote;
+    if (!isAllowedMaintenanceTransition(report.status, status)) {
+      return res.status(409).json({
+        message: `Cannot move a maintenance report from ${report.status} to ${status}.`,
+      });
     }
 
-    await report.save();
+    if (resolutionNote !== undefined && (typeof resolutionNote !== "string" || resolutionNote.length > 2000)) {
+      return res.status(400).json({ message: "Resolution notes must be 2,000 characters or fewer." });
+    }
+
+    const previousStatus = report.status;
+    const update = { status };
+    if (resolutionNote !== undefined) update.resolutionNote = resolutionNote.trim();
+    const updated = await Report.findOneAndUpdate(
+      { _id: report._id, landlord: req.user.id, status: previousStatus },
+      { $set: update },
+      { new: true, runValidators: true },
+    );
+    if (!updated) return res.status(409).json({ message: "This report changed while you were updating it. Refresh and try again." });
 
     return res.status(200).json({
       message: "Report status updated successfully",
-      report,
+      report: updated,
     });
   } catch (error) {
     if (error.name === "CastError") {

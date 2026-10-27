@@ -192,7 +192,7 @@ const getMyInspections = async (req, res) => {
     if (from || to) filter.inspectionDate = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
     const [inspections, total, byStatus] = await Promise.all([
       Inspection.find(filter)
-      .populate("property", "propertyName address city propertyType")
+      .populate("property", "propertyName address city pincode propertyType furnishingStatus furniture rooms")
       .populate("landlord", "name email")
       .populate("tenant", "name email")
       .populate("lastUpdatedBy", "name email role")
